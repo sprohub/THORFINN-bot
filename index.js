@@ -1,69 +1,105 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const { loadCommands } = require('./lib/commandHandler');
-const logger = require('./lib/logger');
+import {
+  default as makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+} from "@whiskeysockets/baileys";
+import { config } from "./config.js";
+import { loadPlugins } from "./pluginLoader.js";
 
-// Prefijo con el que deben empezar los mensajes para ser tratados como comandos
-const PREFIX = '!';
+async function startBot() {
+  const { commands } = await loadPlugins();
+  console.log(`Plugins cargados: ${[...new Set([...commands.values()].map(p => p.command[0] || p.command))].join(", ") || "ninguno"}`);
 
-// Si querés vincular con QR en vez de código, poné esto en false
-const USE_PAIRING_CODE = true;
-// Tu número completo con código de país, sin +, sin espacios ni guiones. Ej: Argentina 54911xxxxxxxx
-const PHONE_NUMBER = '54911XXXXXXXX';
+  const { state, saveCreds } = await useMultiFileAuthState(config.sessionFolder);
+  const { version } = await fetchLatestBaileysVersion();
 
-const client = new Client({
-  authStrategy: new LocalAuth(), // guarda la sesión para no repetir la vinculación cada vez
-  puppeteer: {
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  },
-});
-
-// Carga todos los comandos de la carpeta /commands
-const commands = loadCommands();
-logger.info(`Comandos cargados: ${[...commands.keys()].join(', ') || 'ninguno'}`);
-
-if (USE_PAIRING_CODE) {
-  // En vez de mostrar QR, pide un código de 8 dígitos para ingresar en el celular
-  client.on('qr', async () => {
-    if (client.pairingCodeRequested) return;
-    client.pairingCodeRequested = true;
-    const code = await client.requestPairingCode(PHONE_NUMBER);
-    logger.info(`📱 Código de vinculación: ${code}`);
-    logger.info('En tu celular: WhatsApp > Dispositivos vinculados > Vincular con número de teléfono, e ingresá ese código.');
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    printQRInTerminal: !config.usePairingCode,
   });
-} else {
-  const qrcode = require('qrcode-terminal');
-  client.on('qr', (qr) => {
-    logger.info('Escanea este código QR con WhatsApp:');
-    qrcode.generate(qr, { small: true });
+
+  if (config.usePairingCode && !sock.authState.creds.registered) {
+    const code = await sock.requestPairingCode(config.ownerNumber);
+    console.log(`📱 Código de vinculación: ${code}`);
+    console.log("En tu celular: WhatsApp > Dispositivos vinculados > Vincular con número de teléfono.");
+  }
+
+  sock.ev.on("creds.update", saveCreds);
+
+  sock.ev.on("connection.update", (update) => {
+    const { connection, lastDisconnect } = update;
+
+    if (connection === "open") {
+      console.log(`✅ ${config.botName} conectado y listo.`);
+    }
+
+    if (connection === "close") {
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      console.warn(`Conexión cerrada (${statusCode}). Reconectando: ${shouldReconnect}`);
+      if (shouldReconnect) startBot();
+    }
+  });
+
+  sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    if (type !== "notify") return;
+
+    for (const msg of messages) {
+      try {
+        if (!msg.message || msg.key.fromMe) continue;
+
+        const body =
+          msg.message.conversation ||
+          msg.message.extendedTextMessage?.text ||
+          "";
+
+        const text = body.trim();
+        if (!text) continue;
+
+        // Si hay prefijo configurado, lo exige; si config.prefix es "", no hace falta ninguno
+        if (config.prefix && !text.startsWith(config.prefix)) continue;
+        const withoutPrefix = config.prefix ? text.slice(config.prefix.length) : text;
+
+        const args = withoutPrefix.split(/\s+/);
+        const commandName = args.shift().toLowerCase();
+
+        const plugin = commands.get(commandName);
+        if (!plugin) continue; // no coincide con ningún comando, se ignora
+
+        const jid = msg.key.remoteJid;
+        const isGroup = jid.endsWith("@g.us");
+        const sender = msg.key.participant || msg.key.remoteJid;
+        const senderNumber = sender.split("@")[0];
+
+        // Filtros, igual que en TheYui-MD
+        if (plugin.groupOnly && !isGroup) {
+          await sock.sendMessage(jid, { text: "⚠️ Este comando solo funciona en grupos." });
+          continue;
+        }
+        if (plugin.ownerOnly && senderNumber !== config.ownerNumber) {
+          await sock.sendMessage(jid, { text: "⛔ Este comando es solo para el dueño del bot." });
+          continue;
+        }
+        if (plugin.adminOnly && isGroup) {
+          const groupMeta = await sock.groupMetadata(jid);
+          const isAdmin = groupMeta.participants.some(
+            (p) => p.id === sender && (p.admin === "admin" || p.admin === "superadmin")
+          );
+          if (!isAdmin) {
+            await sock.sendMessage(jid, { text: "⛔ Este comando es solo para administradores del grupo." });
+            continue;
+          }
+        }
+
+        console.log(`Ejecutando "${commandName}" de ${sender}`);
+        await plugin.execute(sock, msg, args, { isGroup, sender, senderNumber, config });
+      } catch (err) {
+        console.error("Error procesando mensaje:", err);
+      }
+    }
   });
 }
 
-client.on('ready', () => {
-  logger.info('✅ Bot conectado y listo.');
-});
-
-client.on('disconnected', (reason) => {
-  logger.warn(`Bot desconectado: ${reason}`);
-});
-
-client.on('message', async (msg) => {
-  try {
-    const body = msg.body?.trim();
-    if (!body || !body.startsWith(PREFIX)) return;
-
-    const args = body.slice(PREFIX.length).split(/\s+/);
-    const commandName = args.shift().toLowerCase();
-
-    const command = commands.get(commandName);
-    if (!command) return; // comando no reconocido, se ignora
-
-    logger.info(`Ejecutando comando "${commandName}" de ${msg.from}`);
-    await command.execute(msg, args, client);
-  } catch (err) {
-    logger.error('Error procesando mensaje:', err);
-    msg.reply('⚠️ Ocurrió un error ejecutando ese comando.').catch(() => {});
-  }
-});
-
-client.initialize();
+startBot();
