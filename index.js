@@ -21,9 +21,23 @@ async function startBot() {
   });
 
   if (config.usePairingCode && !sock.authState.creds.registered) {
-    const code = await sock.requestPairingCode(config.ownerNumber);
-    console.log(`📱 Código de vinculación: ${code}`);
-    console.log("En tu celular: WhatsApp > Dispositivos vinculados > Vincular con número de teléfono.");
+    if (!config.ownerNumber || config.ownerNumber.includes("X")) {
+      console.error("❌ Falta configurar un número real en config.js (ownerNumber). Edita ese archivo y volvé a correr el bot.");
+      process.exit(1);
+    }
+
+    // Pequeña espera para asegurar que el socket terminó el handshake inicial
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    try {
+      const code = await sock.requestPairingCode(config.ownerNumber);
+      console.log(`📱 Código de vinculación: ${code}`);
+      console.log("En tu celular: WhatsApp > Dispositivos vinculados > Vincular con número de teléfono.");
+    } catch (err) {
+      console.error("❌ No se pudo pedir el código de vinculación. Revisá que el número en config.js sea correcto (con código de país, sin '+').");
+      console.error(err.message || err);
+      process.exit(1);
+    }
   }
 
   sock.ev.on("creds.update", saveCreds);
