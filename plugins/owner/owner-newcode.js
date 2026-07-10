@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from "../../config.js";
+import { esOwner as verificarOwner } from "../../middlewares.js";
 
 const API_URL = 'https://dv-edward.onrender.com';
 const API_KEY = 'edward';
@@ -42,7 +43,7 @@ export default {
     const { chatId, sender } = context;
     
     const numeroLimpio = sender.split("@")[0];
-    const esOwner = numeroLimpio === config.ownerNumber;
+    const esOwner = verificarOwner(numeroLimpio);
 
     if (!esOwner) {
       await sock.sendMessage(chatId, {
