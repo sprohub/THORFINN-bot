@@ -1,7 +1,7 @@
 export const config = {
   botName: "MiBot-MD",
   creator: "TuNombre",
-  ownerNumber: "54911XXXXXXXX", // tu número, sin '+' ni espacios
+  ownerNumber: "573225396540", // tu número, sin '+' ni espacios
   sessionFolder: "./session",
   pluginsFolder: "./plugins",
 
