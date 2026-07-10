@@ -1,13 +1,13 @@
 {
-  "name": "whatsapp-bot",
+  "name": "miBot-md",
   "version": "1.0.0",
-  "description": "Base de bot de WhatsApp con carga dinámica de comandos",
+  "description": "Base de bot de WhatsApp sin prefijo, inspirada en TheYui-MD, con carga dinámica de plugins",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.26.0",
-    "qrcode-terminal": "^0.12.0"
+    "@whiskeysockets/baileys": "^6.7.9"
   }
 }
