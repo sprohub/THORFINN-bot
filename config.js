@@ -1,7 +1,7 @@
 export const config = {
   botName: "SAITAMA-MD",
   creator: "AmilcarGit",
-  ownerNumber: "573225396540",
+  ownerNumber: ["51910227479", "5219XXXXXXXX"], // agrega aquí todos los números dueño, sin '+' ni espacios
   sessionFolder: "./session",
   pluginsFolder: "./plugins",
 
