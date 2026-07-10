@@ -1,10 +1,16 @@
-module.exports = {
-  name: 'ping',
-  description: 'Responde pong y muestra la latencia',
-  async execute(msg, args, client) {
+export default {
+  command: ["ping", "speed"],
+  description: "Muestra la velocidad de respuesta del bot",
+  category: "info",
+
+  ownerOnly: false,
+  adminOnly: false,
+  groupOnly: false,
+
+  async execute(sock, msg, args, context) {
     const start = Date.now();
-    const sent = await msg.reply('🏓 Pong...');
+    const jid = msg.key.remoteJid;
     const latency = Date.now() - start;
-    await sent.edit ? sent.edit(`🏓 Pong! (${latency}ms)`) : msg.reply(`🏓 Pong! (${latency}ms)`);
+    await sock.sendMessage(jid, { text: `🏓 Pong! (${latency}ms)` });
   },
 };
