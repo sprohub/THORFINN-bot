@@ -1,7 +1,7 @@
 export const config = {
   botName: "SAITAMA-MD",
   creator: "AmilcarGit",
-  ownerNumber: "51910227479",
+  ownerNumber: "573225814649",
   sessionFolder: "./session",
   pluginsFolder: "./plugins",
 
