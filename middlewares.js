@@ -1,7 +1,8 @@
 import { config } from "./config.js";
 
 export function esOwner(numero) {
-  return numero === config.ownerNumber;
+  const limpio = String(numero || "").split("@")[0].split(":")[0].replace(/\D/g, "");
+  return config.ownerNumber.includes(limpio);
 }
 
 /**
